@@ -1,0 +1,64 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<!-- Copyright (c) 2012  Rally Software Development Corp.  All rights reserved -->
+<html>
+<head>
+    <title>Table Component Example</title>
+    <meta name="Name"    content="User Project Memberships" />
+    <meta name="Version" content="1.0" />
+    <meta name="Vendor"  content="Rally Software" />
+    <meta name="Author" content="Joel Krooswyk" />
+    <script type="text/javascript" src="/apps/1.29/sdk.js"></script>
+    <script type="text/javascript">
+ 
+        function table() {
+            var rallyDataSource = new rally.sdk.data.RallyDataSource('__WORKSPACE_OID__', '__PROJECT_OID__',
+            '__PROJECT_SCOPING_UP__', '__PROJECT_SCOPING_DOWN__');
+            function itemQuery() {
+                var queryObject = {
+                    key: 'users',
+                    type: 'Users',
+                    fetch: 'DisplayName,FirstName,LastName,TeamMemberships'
+                };
+                rallyDataSource.findAll(queryObject, populateTable);
+            }
+ 
+            function populateTable(results) {
+                
+                for (i=0; i<results.users.length; i++) {
+                
+                    var memberships = "";    
+                    
+                    for (j=0; j<results.users[i].TeamMemberships.length; j++) {
+                                                
+                        if (j===1) {
+                            memberships = (results.users[i].TeamMemberships[j]._refObjectName);
+                        } else {
+                            memberships = (memberships + ", " + results.users[i].TeamMemberships[j]._refObjectName);
+                        }
+                    }
+                
+                results.users[i].TeamList = memberships;    
+                
+                }                
+                
+                var tableDiv = document.getElementById('aDiv');
+                var config = { columns:
+                                                [{key: 'DisplayName'},
+                                                 {key: 'FirstName'},
+                                                 {key: 'LastName'},
+                                                 {key: 'TeamList'}] };
+                var table = new rally.sdk.ui.Table(config);
+                table.addRows(results.users);
+                table.display(tableDiv);
+ 
+            };
+            itemQuery();
+        }
+ 
+        rally.addOnLoad(table);
+    </script>
+</head>
+<body>
+   <div id="aDiv"></div>
+</body>
+</html>

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Drag and Drop Story Reparenting</title>
+    <meta name="Name"    content="Drag and Drop Story Reparenting" />
+    <meta name="Version" content="1.0" />
+    <meta name="Vendor"  content="Rally Labs" />
+    <meta name="Author" content="Joel Krooswyk" />
+
+    <!--
+    ** This software is provided without guarantee, support or warranty. 
+    ** (c) 2012 Rally Software
+  -->
+
+<!--Include SDK-->
+<script type="text/javascript" src="https://rally1.rallydev.com/apps/2.0p/sdk.js"></script>
+
+<!--App code-->
+<script type="text/javascript">
+
+    Rally.onReady(function() {
+        Ext.create('Ext.Container', {
+          items: [{
+            xtype: 'rallytree',
+            enableDragAndDrop: true
+          }],
+        renderTo: Ext.getBody().dom
+        });
+    });
+
+</script>
+
+
+</head>
+<body class="myApp">
+</body>
+</html>

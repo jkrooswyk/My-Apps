@@ -1,0 +1,318 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <meta name='Name' content='Time Tracking by Department'/>
+    <meta name='Version' content='0.3'/>
+    <meta name='Vendor' content='Rally Labs'/>
+    <!--
+    ** This software is provided as an example for demonstration of 
+    ** functionality only, without guarantee, support or warranty.
+    ** (c) 2011 Rally Software
+  -->
+    <!--Rally SDK-->
+    <script src='/apps/1.28/sdk.js' type='text/javascript'>
+    </script>
+    <script src='/slm/js-lib/ext/4.1.1/ext-all.js' type='text/javascript'></script>
+    <!--the script we'll modify-->
+
+<script type='text/javascript'>
+function RALLYThing() {
+    var rallyDataSource = null;
+    var g_timebox = null;
+    var g_basedate = new Date();
+    var g_key = "com.rallydev.apps.users.department";
+    var g_departments = {}; // a hash with key=userOID and value=department
+
+    this.init = function() {
+      rallyDataSource = new rally.sdk.data.RallyDataSource(
+        '__WORKSPACE_OID__',
+        '__PROJECT_OID__',
+        '__PROJECT_SCOPING_UP__',
+        '__PROJECT_SCOPING_DOWN__');
+
+      var ahead_button_config = { text: ">>", value: "1" };
+      var ahead_button = new rally.sdk.ui.basic.Button( ahead_button_config );
+      ahead_button.display( "go_ahead", function( b, args ) {
+        calculateDateRange( args.value);
+      });
+      
+      var back_button_config = { text: "<<", value: "-1" };
+      var back_button = new rally.sdk.ui.basic.Button( back_button_config );
+      back_button.display( "go_back", function( b, args ) {
+        calculateDateRange( args.value);
+      });
+      // build the item array for the dropdown
+      var times = [ { label: "By Week", value:  "week" },
+          { label: "By Month", value: "month" },
+          { label: "By Quarter", value: "quarter" } ];
+        
+      var timebox_config = {
+        showLabel: false,
+        items: times
+      };
+
+      g_timebox = new rally.sdk.ui.basic.Dropdown( timebox_config );
+      g_timebox.display( 'app_timebox', function( box, args ) {
+        calculateDateRange(0);
+      });
+    }; 
+    
+    var calculateDateRange = function( time_delta ) {
+      if ( g_timebox ) {
+          console.log( g_timebox.getValue() );
+          console.log( g_basedate );
+          var timebox = g_timebox.getValue();
+          var time_sets = [];
+          if ( timebox == "week" ) { 
+            g_basedate = rally.sdk.util.DateTime.add( g_basedate, "day", 7 * time_delta );
+            time_sets = getWeekRange();
+          } else if ( timebox == "month" ) {
+            g_basedate = rally.sdk.util.DateTime.add( g_basedate, "month", 1 * time_delta );
+            time_sets = getMonthRange();
+          } else if ( timebox == "quarter" ) {
+            g_basedate = rally.sdk.util.DateTime.add( g_basedate, "month", 3 * time_delta );
+            time_sets = getQuarterRange();
+          }
+          
+          var time_billboard = dojo.byId('app_timestart');
+          time_billboard.innerHTML = "Completed timesheets for the " + timebox;
+          time_billboard.innerHTML += "<br/>starting " + rally.sdk.util.DateTime.toIsoString( time_sets.start ).replace(/T.*$/,"");
+          var one_day_back = rally.sdk.util.DateTime.add( time_sets.start, "day", -1 );
+          var start_date = rally.sdk.util.DateTime.toIsoString(one_day_back).replace(/T.*$/,"");
+          one_day_back = rally.sdk.util.DateTime.add( time_sets.end, "day", -1 );
+          var end_date = rally.sdk.util.DateTime.toIsoString( one_day_back ).replace(/T.*$/,"");
+          getData( start_date, end_date );
+      }
+    };
+    
+    var getData = function(start,end) {
+      dojo.empty( dojo.byId( 'app_box' ) );
+      var query = new rally.sdk.util.Query( ' WeekStartDate >= "' + start + '"' ).and( ' WeekStartDate < "' + end + '"');
+
+      var queryArray = [];
+      queryArray.push({
+        key: 'preferences',
+        type: 'preferences',
+        query: '( Name = "' + g_key + '")',
+        fetch: 'ObjectID,User,Value'
+      });
+      queryArray.push({
+        key: 'timecards',
+        type: 'timeentryitem',
+        query: query,
+        fetch: 'Project,Name,ObjectID,Values,WeekStartDate,Hours,User'
+      });
+      rallyDataSource.findAll( queryArray, calculateAllocation );
+    }; 
+  
+    var calculateAllocation = function( results ) {
+      var prefs = results.preferences;
+      dojo.forEach( prefs, function( item, i ) {
+        if ( item.User && item.User.ObjectID ) {
+          g_departments[ item.User.ObjectID ] = item.Value;
+        }
+      });
+
+      var department_allocations = {}; // key is department, value is allocations hash
+      for ( var i=0;i<results.timecards.length;i++ ) {
+        var card = results.timecards[i];
+        var entries = card.Values;
+        var user = card.User;
+        var department = "--No Selection--";
+
+        if ( g_departments[ user.ObjectID ] ) {
+          department = g_departments[user.ObjectID];
+        }
+        if ( ! department_allocations[ department ] ) {
+          department_allocations[ department ] = {};
+        }
+
+        var allocations = department_allocations[ department ];
+
+        for ( var e=0;e<entries.length;e++ ) {
+          var hours = entries[e].Hours || 0;
+          var project = card.Project.Name;
+          if ( ! allocations[ project ] ) {
+            allocations[project] = 0;
+          }
+          allocations[project] += hours;
+        }
+
+        department_allocations[ department ] = allocations;
+      }
+
+      for ( var dept in department_allocations ) {
+        if ( department_allocations.hasOwnProperty( dept ) ) {
+          var percentages = calculatePercentages( department_allocations[dept] );
+          displayChart( dept, percentages );
+          //displayTable( dept, department_allocations[dept] );
+        } 
+      }
+    };
+
+    var calculatePercentages = function( allocations ) {
+      var percentages = {};
+      var total = 0;
+      for ( var proj in allocations ) {
+        if ( allocations.hasOwnProperty( proj ) ) {
+          total += allocations[proj];
+        }
+      }
+      if ( total > 0 ) {
+        for ( var p in allocations ) {
+          if ( allocations.hasOwnProperty(p) ) {
+            percentages[p] = Math.round( 1000 * allocations[p]/total) / 10;
+          }
+        }
+      }
+      return percentages;
+    };
+
+    var displayChart = function( department, allocations ) {
+      // make a place to put the pie
+      var department_box = document.createElement( "div" );
+      department_box.innerHTML = "<strong>" + department + "</strong><p>";
+      var pie_box = document.createElement( "div" );
+      dojo.byId( "app_box" ).appendChild( department_box );
+      department_box.appendChild( pie_box );
+
+      // format the data for a pie
+      var data = [];
+      for ( var proj in allocations ) {
+        if ( allocations.hasOwnProperty( proj ) ) {
+          var slice = {
+            project: proj + " (" + allocations[proj] + "%)",
+            value: allocations[proj]
+          };
+          data.push( slice );
+        }
+      }
+    
+      // make a store
+        var store = Ext.create( 'Ext.data.JsonStore', {
+          fields: ['project','value'],
+          data: data
+        });
+
+      var chart = Ext.create( 'Ext.chart.Chart', {width: 250,
+        height: 250,
+        animate: false,
+        shadow: true,
+        store: store,
+        renderTo: pie_box,
+        insetPadding: 25,
+        theme: 'Base:gradients',
+        series: [{
+          type: 'pie',
+          field: 'value',
+          highlight: {
+            segment: {
+              margin: 20
+            }
+          },
+          label: {
+            field: 'project',
+            display: 'insideEnd',
+            contrast: true,
+            font: '12px Arial'
+          }
+        }]
+      });
+
+      return;
+    };
+
+    var displayTable = function( dept, allocations ) {
+      var dept_id = dept.replace( /\W/g,"_" );
+      if ( dijit.byId( dept_id + "Grid" ) ) {
+        dijit.byId( dept_id + "Grid" ).destroy();
+      }
+      var table_box = document.createElement( "div" );
+      table_box.id = dept_id;
+      dojo.byId( "app_box" ).appendChild( table_box );
+
+      var allocation_array = [];
+      for ( var proj in allocations ) {
+        if ( allocations.hasOwnProperty( proj ) ) {
+          allocation_array.push( { "Project": proj, "Total_Hours": allocations[proj] } );
+        }
+      }
+      var table_config = {
+        columnKeys: [ 'Project', 'Total_Hours' ],
+        columnWidths: [ '100px', '100px' ]
+      };
+      var app_table = new rally.sdk.ui.Table(table_config);
+      app_table.addRows(allocation_array);
+      app_table.display( table_box );
+    }; 
+    
+    var getWeekRange = function() {
+        // adjust to the start of this week
+        var distance_to_front_of_week = -1 * g_basedate.getDay(); 
+        var start_of_week = rally.sdk.util.DateTime.add( g_basedate, "day", distance_to_front_of_week );
+        var end_of_week = rally.sdk.util.DateTime.add( start_of_week, "day", 7 );
+        return { start: start_of_week, end: end_of_week };
+      };
+      
+      var getMonthRange = function() {
+        var distance_to_front_of_month = -1 * ( g_basedate.getDate() - 1 );
+        var start_of_month = rally.sdk.util.DateTime.add( g_basedate, "day", distance_to_front_of_month);
+        var end_of_month = rally.sdk.util.DateTime.add( start_of_month, "month", 1);
+        return { start: start_of_month, end: end_of_month };
+      };
+      
+      var getQuarterRange = function() {
+        var start_of_month = getMonthRange().start;
+        //assuming that quarter is 
+        //jan/feb/mar, apr/may/jun, jul/aug/sep, oct/nov/dec
+        var distance_to_front_of_quarter = -1 * ( start_of_month.getMonth() % 3 );
+        var start_of_quarter = rally.sdk.util.DateTime.add( start_of_month, "month", distance_to_front_of_quarter );
+        var end_of_quarter = rally.sdk.util.DateTime.add( start_of_quarter, "month", 3);  
+        return { start: start_of_quarter, end: end_of_quarter };
+      };
+      
+  }
+    </script>
+    <!--Where everything starts-->
+    <script type='text/javascript'>
+      rally.addOnLoad( function() { 
+        dojo.require("dojox.charting.Chart2D");
+        dojo.require("dojox.charting.action2d.Tooltip");
+        dojo.require("dojox.charting.themes.Wetland");
+          var app = new RALLYThing(); 
+          app.init(); 
+      });
+    </script>
+  </head>
+  <body>
+    <div id='app_interface'>
+      <table>
+        <tr>
+          <td>
+            <div id='go_back'>
+            </div>
+          <td>
+            <div id='app_timebox'>
+            </div>
+          </td>
+          <td>
+	          <div id='go_ahead'>
+	          </div>
+           
+          </td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>
+                <div id='app_timestart'>
+                </div>
+            </td>
+            <td></td>
+        </tr>
+      </table>
+    </div>
+    &nbsp;
+    <div id="app_box" style="width: 450px; height: 250px;">
+    </div>
+  </body>
+</html>

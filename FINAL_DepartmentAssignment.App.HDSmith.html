@@ -1,0 +1,140 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <meta name='Name' content='Department Assignment'/>
+    <meta name='Version' content='0.1'/>
+    <meta name='Vendor' content='Rally Labs'/>
+    <!--
+    ** This software is provided as an example for demonstration of 
+    ** functionality only, without guarantee, support or warranty.
+    ** (c) 2011 Rally Software
+  -->
+    <!--Rally SDK-->
+    <script src='/apps/1.29/sdk.js?debug=true' type='text/javascript'>
+    </script>
+    <!--the script we'll modify-->
+
+<script type='text/javascript'>
+function RALLYThing() {
+    var rallyDataSource = null;
+    var g_timebox_name = null;
+    var g_valid_departments = [ "--No Selection--", "Engineering","Sales","Services","Support" ]; 
+    var g_key = "com.rallydev.apps.users.department";
+    var g_existing_assignments = {};
+
+    this.init = function() {
+      rallyDataSource = new rally.sdk.data.RallyDataSource(
+        '__WORKSPACE_OID__',
+        '__PROJECT_OID__',
+        '__PROJECT_SCOPING_UP__',
+        '__PROJECT_SCOPING_DOWN__');
+  
+      doQuery();
+    }; 
+    
+    var doQuery = function() {
+      dojo.empty( dojo.byId( 'app_box' ) );
+      if ( dijit.byId( 'app_boxGrid' ) ) {
+        dijit.byId('app_boxGrid').destroy();
+      }
+
+      var queryArray = [];
+      queryArray.push({
+        key: 'users',
+        type: 'users',
+        query: '( Disabled = false )',
+        order: 'LastName',
+        fetch: 'ObjectID,FirstName,LastName,UserName'
+      });
+      queryArray.push({
+        key: 'preferences',
+        type: 'preferences',
+        query: '( Name = "' + g_key + '")',
+        fetch: 'ObjectID,User,Value'
+      });
+      rallyDataSource.findAll( queryArray, analyzeUsers );
+    }; 
+   
+    var analyzeUsers = function( results ) {
+      console.log( results );
+      var users = results.users;
+      var prefs = results.preferences;
+      // push preferences into a hash with the user objectID as the key
+      g_existing_assignments = {};
+      dojo.forEach( prefs, function( item, i ) {
+        if ( item.User && item.User.ObjectID ) {
+          g_existing_assignments[ item.User.ObjectID ] = item;
+        }
+      });
+      // add a selector box to each user 
+      dojo.forEach( users, addDepartmentBox );
+
+      displayTable( users );
+    };
+
+    var addDepartmentBox = function( user, index ) {
+      var items = [];
+      dojo.forEach( g_valid_departments, function( item, i ) {
+        items.push ( { label: item, value: item } );
+      } );
+
+      var config = { showLabel: false, items: items, rememberSelection: false };
+      if ( g_existing_assignments[ user.ObjectID ] ) {
+        config.defaultValue = g_existing_assignments[user.ObjectID].Value;
+      }
+      var dropdown = new rally.sdk.ui.basic.Dropdown(config);
+      dropdown.addEventListener( "onChange", function( d, args ) {
+        var new_department = args.value;
+        console.log( user._ref );
+        var pref = {
+          Name: g_key,
+          User: user._ref,
+          Value: new_department
+        };
+        // do we already have a preference?
+        if ( g_existing_assignments[ user.ObjectID ] ) {
+          pref._ref = g_existing_assignments[user.ObjectID]._ref;
+          rallyDataSource.update( pref, function() {}, doError );
+        } else {
+          rallyDataSource.create( "preference", pref, function(result){
+            var new_pref = result;
+            new_pref.Value = new_department;
+            new_pref.User = user;
+            g_existing_assignments[ user.ObjectID ] = new_pref;
+          }, doError );
+        }
+      });
+      user._Department = dropdown;
+    };
+
+    var displayTable = function( users ) {
+      var app_box = dojo.byId('app_box');
+      var table_config = {
+        columnKeys: [ 'UserName', 'FirstName', 'LastName','_Department' ],
+        columnHeaders: [ 'UserName', 'First Name', 'Last Name','Department' ],
+        columnWidths: [ '250px', '100px', '100px', '250px' ]
+      };
+      var app_table = new rally.sdk.ui.Table(table_config);
+      app_table.addRows(users);
+      app_table.display( app_box );
+    }; 
+  
+    var doError = function( result ) {
+      alert( result.Errors[0] );
+    };
+  }
+    </script>
+    <!--Where everything starts-->
+    <script type='text/javascript'>
+      rally.addOnLoad( function() { var app = new RALLYThing(); app.init(); });
+    </script>
+  </head>
+  <body>
+    <div id='app_interface'>
+      <div id='app_timebox'>
+      </div>
+    </div>
+    <div id='app_box'>
+    </div>
+  </body>
+</html>
