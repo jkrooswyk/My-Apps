@@ -4,7 +4,7 @@
 <head>
     <title>Table Component Example</title>
     <meta name="Name"    content="User Project Memberships" />
-    <meta name="Version" content="1.0" />
+    <meta name="Version" content="1.1" />
     <meta name="Vendor"  content="Rally Software" />
     <meta name="Author" content="Joel Krooswyk" />
     <script type="text/javascript" src="/apps/1.29/sdk.js"></script>
@@ -31,10 +31,14 @@
                     for (j=0; j<results.users[i].TeamMemberships.length; j++) {
                                                 
                         if (j===1) {
-                            memberships = (results.users[i].TeamMemberships[j]._refObjectName);
+                            memberships = ("<B>-</B> " + results.users[i].TeamMemberships[j]._refObjectName);
                         } else {
-                            memberships = (memberships + ", " + results.users[i].TeamMemberships[j]._refObjectName);
+                            memberships = (memberships + "<BR><B>-</B> " + results.users[i].TeamMemberships[j]._refObjectName);
                         }
+                    }
+                
+                    if (memberships == "") {
+                        memberships = "<I>[Not a member of any team]</I>"
                     }
                 
                 results.users[i].TeamList = memberships;    
@@ -43,10 +47,10 @@
                 
                 var tableDiv = document.getElementById('aDiv');
                 var config = { columns:
-                                                [{key: 'DisplayName'},
-                                                 {key: 'FirstName'},
-                                                 {key: 'LastName'},
-                                                 {key: 'TeamList'}] };
+                                                [{key: 'DisplayName', header: 'Display Name'},
+                                                 {key: 'FirstName', header: 'First Name'},
+                                                 {key: 'LastName', header: 'Last Name'},
+                                                 {key: 'TeamList', header: 'Team Memberships'}] };
                 var table = new rally.sdk.ui.Table(config);
                 table.addRows(results.users);
                 table.display(tableDiv);
